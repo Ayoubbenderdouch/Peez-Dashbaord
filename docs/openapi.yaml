@@ -1,0 +1,1260 @@
+openapi: 3.1.0
+info:
+  title: PeeZ Neighborhood Membership API
+  version: 1.0.0
+  description: |
+    REST API for PeeZ, a neighborhood membership platform for Oran, Algeria.
+    
+    ## Business Rule
+    Exactly **ONE partner shop** per (neighborhood, category) combination.
+    
+    ## Authentication
+    - Bearer token via Laravel Sanctum
+    - Vendor/Admin endpoints require authentication
+    - Public endpoints (neighborhoods, categories, shops) accessible without auth
+    
+    ## Data Formats
+    - JSON only
+    - Timestamps: ISO-8601 UTC
+    - Request/Response: camelCase
+    - Database: snake_case
+    
+    ## Rate Limiting
+    60 requests per minute per token
+    
+  contact:
+    name: PeeZ API Support
+    email: api@peez.dz
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.peez.dz/api/v1
+    description: Production
+  - url: http://localhost/api/v1
+    description: Development
+
+tags:
+  - name: Public
+    description: Publicly accessible endpoints
+  - name: User
+    description: User subscription & membership endpoints
+  - name: Vendor
+    description: Vendor POS endpoints for activations
+  - name: Admin
+    description: Administrative endpoints
+  - name: Notifications
+    description: Push notification endpoints
+
+security:
+  - bearerAuth: []
+
+paths:
+  # ==================== PUBLIC ENDPOINTS ====================
+  
+  /neighborhoods:
+    get:
+      summary: List all neighborhoods
+      tags: [Public]
+      security: []
+      parameters:
+        - in: query
+          name: city
+          schema:
+            type: string
+            default: Oran
+          description: Filter by city
+      responses:
+        '200':
+          description: List of neighborhoods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Neighborhood'
+              example:
+                data:
+                  - id: 1
+                    name: Bab Ezzouar
+                    city: Oran
+                  - id: 2
+                    name: Hydra
+                    city: Oran
+
+  /categories:
+    get:
+      summary: List all business categories
+      tags: [Public]
+      security: []
+      responses:
+        '200':
+          description: List of categories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Category'
+              example:
+                data:
+                  - id: 1
+                    name: Grocery
+                    slug: grocery
+                  - id: 2
+                    name: Butcher
+                    slug: butcher
+
+  /shops:
+    get:
+      summary: Find partner shops
+      description: Returns the single partner shop for given neighborhood and category combination
+      tags: [Public]
+      security: []
+      parameters:
+        - in: query
+          name: neighborhoodId
+          schema:
+            type: integer
+          description: Filter by neighborhood
+        - in: query
+          name: categoryId
+          schema:
+            type: integer
+          description: Filter by category
+      responses:
+        '200':
+          description: Partner shop(s)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ShopSummary'
+              example:
+                data:
+                  - id: 1
+                    name: Super Marché Oran
+                    discountPercent: 7.5
+                    avgRating: 4.5
+                    ratingsCount: 23
+                    lat: 35.6976
+                    lng: -0.6337
+                    neighborhood:
+                      id: 1
+                      name: Bab Ezzouar
+                    category:
+                      id: 1
+                      name: Grocery
+
+  /shops/{id}:
+    get:
+      summary: Get shop details
+      tags: [Public]
+      security: []
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Shop details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ==================== USER ENDPOINTS ====================
+  
+  /users/{uuid}/subscription:
+    get:
+      summary: Get user subscription status
+      tags: [User]
+      security: []
+      parameters:
+        - in: path
+          name: uuid
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Subscription status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Subscription'
+              example:
+                data:
+                  id: 1
+                  userId: 123
+                  status: active
+                  startAt: "2025-01-01T00:00:00Z"
+                  endAt: "2025-04-01T00:00:00Z"
+                  source: vendor
+        '404':
+          description: User not found or no subscription
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+
+  /users/{uuid}/card:
+    get:
+      summary: Get membership card details
+      description: Returns membership ID and QR code payload for shop validation
+      tags: [User]
+      security: []
+      parameters:
+        - in: path
+          name: uuid
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Membership card
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      membershipId:
+                        type: string
+                        description: Unique membership identifier
+                      qrPayload:
+                        type: string
+                        description: QR code data for vendor scanning
+                      status:
+                        type: string
+                        enum: [active, expired]
+                      validUntil:
+                        type: string
+                        format: date-time
+              example:
+                data:
+                  membershipId: "PEEZ-2025-001234"
+                  qrPayload: "eyJ1dWlkIjoiNTUwZTg0MDAtZTI5Yi00MWQ0LWE3MTYtNDQ2NjU1NDQwMDAwIiwic3RhdHVzIjoiYWN0aXZlIn0="
+                  status: active
+                  validUntil: "2025-04-01T00:00:00Z"
+
+  # ==================== RATING ENDPOINTS ====================
+  
+  /ratings:
+    post:
+      summary: Rate a shop
+      description: User can rate each shop once. Updates rating if already exists.
+      tags: [User]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - shopId
+                - stars
+              properties:
+                shopId:
+                  type: integer
+                stars:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+            example:
+              shopId: 1
+              stars: 5
+      responses:
+        '200':
+          description: Rating created/updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      ratingId:
+                        type: integer
+                      shopId:
+                        type: integer
+                      stars:
+                        type: integer
+                      newAverage:
+                        type: number
+                        format: float
+                      totalRatings:
+                        type: integer
+              example:
+                data:
+                  ratingId: 45
+                  shopId: 1
+                  stars: 5
+                  newAverage: 4.6
+                  totalRatings: 24
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  # ==================== VENDOR ENDPOINTS ====================
+  
+  /auth/vendor/login:
+    post:
+      summary: Vendor authentication
+      tags: [Vendor]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone
+                - password
+              properties:
+                phone:
+                  type: string
+                  example: "+213555123456"
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                  vendorId:
+                    type: integer
+                  shopId:
+                    type: integer
+              example:
+                token: "1|laravel_sanctum_token"
+                vendorId: 5
+                shopId: 12
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /vendor/activate:
+    post:
+      summary: Activate or extend user subscription
+      description: |
+        Creates new subscription or extends existing one.
+        Idempotent via `Idempotency-Key` header.
+      tags: [Vendor]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+            format: uuid
+          required: true
+          description: Unique key to prevent duplicate activations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userUuid
+                - months
+              properties:
+                userUuid:
+                  type: string
+                  format: uuid
+                months:
+                  type: integer
+                  enum: [1, 2, 3]
+                  description: Subscription duration
+                shopId:
+                  type: integer
+                  description: Optional shop override (defaults to vendor's shop)
+            example:
+              userUuid: "550e8400-e29b-41d4-a716-446655440000"
+              months: 3
+      responses:
+        '200':
+          description: Subscription activated/extended
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        enum: [active]
+                      startAt:
+                        type: string
+                        format: date-time
+                      endAt:
+                        type: string
+                        format: date-time
+                      activationId:
+                        type: integer
+                      amountDzd:
+                        type: integer
+              example:
+                data:
+                  status: active
+                  startAt: "2025-01-15T00:00:00Z"
+                  endAt: "2025-04-15T00:00:00Z"
+                  activationId: 123
+                  amountDzd: 900
+        '409':
+          description: Duplicate idempotency key
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '422':
+          $ref: '#/components/responses/ValidationError'
+
+  /vendor/activations:
+    get:
+      summary: List vendor activations
+      tags: [Vendor]
+      parameters:
+        - in: query
+          name: month
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+            example: "2025-01"
+          description: Filter by month (YYYY-MM)
+        - in: query
+          name: page
+          schema:
+            type: integer
+            default: 1
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of activations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Activation'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+
+  /vendor/users/{uuid}/status:
+    get:
+      summary: Quick user validity check
+      description: Fast endpoint for POS to validate discount eligibility at checkout
+      tags: [Vendor]
+      parameters:
+        - in: path
+          name: uuid
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: User status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      uuid:
+                        type: string
+                        format: uuid
+                      name:
+                        type: string
+                      hasActiveSubscription:
+                        type: boolean
+                      validUntil:
+                        type: string
+                        format: date-time
+                        nullable: true
+              example:
+                data:
+                  uuid: "550e8400-e29b-41d4-a716-446655440000"
+                  name: "Ahmed Mohamed"
+                  hasActiveSubscription: true
+                  validUntil: "2025-04-15T00:00:00Z"
+
+  # ==================== ADMIN ENDPOINTS ====================
+  
+  /admin/neighborhoods:
+    get:
+      summary: List neighborhoods (admin)
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of neighborhoods
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Neighborhood'
+    
+    post:
+      summary: Create neighborhood
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - city
+              properties:
+                name:
+                  type: string
+                city:
+                  type: string
+                  default: Oran
+      responses:
+        '201':
+          description: Neighborhood created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Neighborhood'
+
+  /admin/neighborhoods/{id}:
+    put:
+      summary: Update neighborhood
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                city:
+                  type: string
+      responses:
+        '200':
+          description: Neighborhood updated
+    
+    delete:
+      summary: Delete neighborhood
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Neighborhood deleted
+
+  /admin/categories:
+    get:
+      summary: List categories (admin)
+      tags: [Admin]
+      responses:
+        '200':
+          description: List of categories
+    
+    post:
+      summary: Create category
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - slug
+              properties:
+                name:
+                  type: string
+                slug:
+                  type: string
+      responses:
+        '201':
+          description: Category created
+
+  /admin/shops:
+    get:
+      summary: List all shops (admin)
+      tags: [Admin]
+      parameters:
+        - in: query
+          name: neighborhoodId
+          schema:
+            type: integer
+        - in: query
+          name: categoryId
+          schema:
+            type: integer
+        - in: query
+          name: isActive
+          schema:
+            type: boolean
+      responses:
+        '200':
+          description: List of shops
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Shop'
+    
+    post:
+      summary: Create shop
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+                - neighborhoodId
+                - categoryId
+                - discountPercent
+                - lat
+                - lng
+              properties:
+                name:
+                  type: string
+                neighborhoodId:
+                  type: integer
+                categoryId:
+                  type: integer
+                discountPercent:
+                  type: number
+                  format: float
+                  minimum: 5.0
+                  maximum: 8.0
+                lat:
+                  type: number
+                  format: double
+                lng:
+                  type: number
+                  format: double
+                phone:
+                  type: string
+                isActive:
+                  type: boolean
+                  default: true
+      responses:
+        '201':
+          description: Shop created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Shop'
+        '422':
+          description: Validation error - duplicate shop for (neighborhood, category) or invalid discount
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+              example:
+                type: "https://api.peez.dz/problems/validation-error"
+                title: "Validation Error"
+                status: 422
+                detail: "A shop already exists for this neighborhood and category combination"
+                code: "DUPLICATE_SHOP"
+                key: "neighborhoodId"
+
+  /admin/shops/{id}:
+    get:
+      summary: Get shop (admin)
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Shop details
+    
+    put:
+      summary: Update shop
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                discountPercent:
+                  type: number
+                  minimum: 5.0
+                  maximum: 8.0
+                phone:
+                  type: string
+                isActive:
+                  type: boolean
+      responses:
+        '200':
+          description: Shop updated
+    
+    delete:
+      summary: Delete shop
+      tags: [Admin]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: Shop deleted
+
+  /admin/coverage/summary:
+    get:
+      summary: Coverage report
+      description: Shows which neighborhoods have partner shops for each category
+      tags: [Admin]
+      responses:
+        '200':
+          description: Coverage summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      totalNeighborhoods:
+                        type: integer
+                      totalCategories:
+                        type: integer
+                      possibleCombinations:
+                        type: integer
+                      actualShops:
+                        type: integer
+                      coveragePercent:
+                        type: number
+                        format: float
+                      byNeighborhood:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            neighborhoodId:
+                              type: integer
+                            neighborhoodName:
+                              type: string
+                            coveredCategories:
+                              type: integer
+                            totalCategories:
+                              type: integer
+                            missingCategories:
+                              type: array
+                              items:
+                                type: string
+              example:
+                data:
+                  totalNeighborhoods: 10
+                  totalCategories: 12
+                  possibleCombinations: 120
+                  actualShops: 85
+                  coveragePercent: 70.8
+                  byNeighborhood:
+                    - neighborhoodId: 1
+                      neighborhoodName: "Bab Ezzouar"
+                      coveredCategories: 10
+                      totalCategories: 12
+                      missingCategories: ["Beauty Salon", "Hair Salon"]
+
+  /admin/reports/activations:
+    get:
+      summary: Monthly activation report
+      tags: [Admin]
+      parameters:
+        - in: query
+          name: month
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}$'
+            example: "2025-01"
+          required: true
+      responses:
+        '200':
+          description: Activation report by shop
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      month:
+                        type: string
+                      totalActivations:
+                        type: integer
+                      totalRevenueDzd:
+                        type: integer
+                      byShop:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            shopId:
+                              type: integer
+                            shopName:
+                              type: string
+                            activationsCount:
+                              type: integer
+                            revenueDzd:
+                              type: integer
+                              description: activationsCount * 300
+                            avgStars:
+                              type: number
+                              format: float
+                              nullable: true
+                            neighborhood:
+                              type: string
+                            category:
+                              type: string
+              example:
+                data:
+                  month: "2025-01"
+                  totalActivations: 450
+                  totalRevenueDzd: 135000
+                  byShop:
+                    - shopId: 1
+                      shopName: "Super Marché Oran"
+                      activationsCount: 45
+                      revenueDzd: 13500
+                      avgStars: 4.5
+                      neighborhood: "Bab Ezzouar"
+                      category: "Grocery"
+
+  /admin/ratings/summary:
+    get:
+      summary: Ratings summary
+      tags: [Admin]
+      parameters:
+        - in: query
+          name: shopId
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Ratings statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      shopId:
+                        type: integer
+                      shopName:
+                        type: string
+                      totalRatings:
+                        type: integer
+                      avgStars:
+                        type: number
+                        format: float
+                      distribution:
+                        type: object
+                        properties:
+                          "1":
+                            type: integer
+                          "2":
+                            type: integer
+                          "3":
+                            type: integer
+                          "4":
+                            type: integer
+                          "5":
+                            type: integer
+
+  /admin/campaigns/push:
+    post:
+      summary: Send push notification campaign
+      tags: [Admin]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - segment
+                - title
+                - body
+              properties:
+                segment:
+                  type: object
+                  description: Targeting criteria
+                  properties:
+                    neighborhoodId:
+                      type: integer
+                    categoryId:
+                      type: integer
+                    shopId:
+                      type: integer
+                title:
+                  type: string
+                  maxLength: 100
+                body:
+                  type: string
+                  maxLength: 500
+            example:
+              segment:
+                neighborhoodId: 1
+              title: "New Partner Shop!"
+              body: "Check out our new grocery partner in Bab Ezzouar"
+      responses:
+        '200':
+          description: Campaign sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      campaignId:
+                        type: integer
+                      recipientsCount:
+                        type: integer
+                      sentAt:
+                        type: string
+                        format: date-time
+
+  # ==================== NOTIFICATION & PAYMENT WEBHOOKS ====================
+  
+  /notifications/push:
+    post:
+      summary: Send push notification (internal)
+      tags: [Notifications]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userUuid:
+                  type: string
+                  format: uuid
+                segment:
+                  type: object
+                title:
+                  type: string
+                body:
+                  type: string
+      responses:
+        '200':
+          description: Notification queued
+
+  /payments/slickpay/webhook:
+    post:
+      summary: SlickPay payment webhook
+      tags: [Notifications]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                transactionId:
+                  type: string
+                status:
+                  type: string
+                amount:
+                  type: number
+                metadata:
+                  type: object
+      responses:
+        '200':
+          description: Webhook processed
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Neighborhood:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        city:
+          type: string
+          default: Oran
+
+    Category:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+
+    ShopSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        discountPercent:
+          type: number
+          format: float
+        avgRating:
+          type: number
+          format: float
+          nullable: true
+        ratingsCount:
+          type: integer
+        lat:
+          type: number
+          format: double
+        lng:
+          type: number
+          format: double
+        neighborhood:
+          $ref: '#/components/schemas/Neighborhood'
+        category:
+          $ref: '#/components/schemas/Category'
+
+    Shop:
+      allOf:
+        - $ref: '#/components/schemas/ShopSummary'
+        - type: object
+          properties:
+            phone:
+              type: string
+            isActive:
+              type: boolean
+
+    Subscription:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        status:
+          type: string
+          enum: [active, expired, cancelled]
+        startAt:
+          type: string
+          format: date-time
+        endAt:
+          type: string
+          format: date-time
+        source:
+          type: string
+          enum: [vendor, in_app_future]
+
+    Activation:
+      type: object
+      properties:
+        id:
+          type: integer
+        userId:
+          type: integer
+        shopId:
+          type: integer
+        vendorId:
+          type: integer
+        months:
+          type: integer
+          enum: [1, 2, 3]
+        amountDzd:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+
+    Pagination:
+      type: object
+      properties:
+        total:
+          type: integer
+        count:
+          type: integer
+        perPage:
+          type: integer
+        currentPage:
+          type: integer
+        totalPages:
+          type: integer
+        next:
+          type: string
+          nullable: true
+          format: uri
+
+    ProblemDetails:
+      type: object
+      description: RFC7807 Problem Details
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI reference to problem type
+        title:
+          type: string
+          description: Short human-readable summary
+        status:
+          type: integer
+          description: HTTP status code
+        detail:
+          type: string
+          description: Human-readable explanation
+        code:
+          type: string
+          description: Application-specific error code
+        key:
+          type: string
+          description: Field or parameter that caused the error
+      required:
+        - type
+        - title
+        - status
+
+  responses:
+    NotFound:
+      description: Resource not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: "https://api.peez.dz/problems/not-found"
+            title: "Resource Not Found"
+            status: 404
+            detail: "The requested resource does not exist"
+            code: "NOT_FOUND"
+
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetails'
+          example:
+            type: "https://api.peez.dz/problems/unauthorized"
+            title: "Unauthorized"
+            status: 401
+            detail: "Authentication credentials are missing or invalid"
+            code: "UNAUTHORIZED"
+
+    ValidationError:
+      description: Validation failed
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/ProblemDetails'
+              - type: object
+                properties:
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items:
+                        type: string
+          example:
+            type: "https://api.peez.dz/problems/validation-error"
+            title: "Validation Error"
+            status: 422
+            detail: "The request data failed validation"
+            code: "VALIDATION_ERROR"
+            errors:
+              stars: ["The stars field must be between 1 and 5"]
+              shopId: ["The shop ID is required"]

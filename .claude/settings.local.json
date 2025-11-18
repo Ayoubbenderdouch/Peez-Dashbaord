@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(php artisan tinker:*)",
+      "Bash(lsof:*)",
+      "Bash(curl:*)",
+      "Bash(kill:*)",
+      "Bash(xcodebuild:*)",
+      "Bash(php artisan:*)",
+      "Bash(plutil:*)",
+      "Bash(find:*)",
+      "Bash([ -f .git/config ])",
+      "Bash(chmod:*)",
+      "Bash([ -f .gitignore ])",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
