@@ -20,7 +20,7 @@ class UserSeeder extends Seeder
             'name' => 'Admin User',
             'phone' => '+213551234567',
             'email' => 'admin@peez.dz',
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password123'),
             'role' => 'admin',
             'is_vendor' => false,
         ]);
@@ -31,7 +31,7 @@ class UserSeeder extends Seeder
             'name' => 'Manager User',
             'phone' => '+213551234568',
             'email' => 'manager@peez.dz',
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password123'),
             'role' => 'manager',
             'is_vendor' => false,
         ]);
@@ -42,20 +42,30 @@ class UserSeeder extends Seeder
             'name' => 'Vendor User',
             'phone' => '+213551234569',
             'email' => 'vendor@peez.dz',
-            'password' => Hash::make('password'),
+            'password' => Hash::make('password123'),
             'role' => 'vendor',
             'is_vendor' => true,
         ]);
 
         // Customer users
-        for ($i = 1; $i <= 3; $i++) {
+        User::create([
+            'uuid' => Str::uuid(),
+            'name' => 'Customer User',
+            'phone' => '+213551234561',
+            'email' => 'customer@peez.dz',
+            'password' => Hash::make('password123'),
+            'role' => 'customer',
+            'is_vendor' => false,
+        ]);
+
+        for ($i = 2; $i <= 3; $i++) {
             User::create([
                 'uuid' => Str::uuid(),
                 'name' => "Customer {$i}",
                 'phone' => "+21355123456{$i}",
                 'email' => "customer{$i}@example.com",
-                'password' => Hash::make('password'),
-                'role' => 'vendor', // Default role
+                'password' => Hash::make('password123'),
+                'role' => 'customer',
                 'is_vendor' => false,
             ]);
         }
