@@ -35,7 +35,7 @@ class ShopResource extends JsonResource
                 'slug' => $this->category?->slug,
             ]),
             'rating' => [
-                'average' => round($this->ratings->avg('stars') ?? 0, 1),
+                'average' => round(($this->relationLoaded('ratings') ? $this->ratings->avg('stars') : 0) ?? 0, 1),
                 'count' => $this->relationLoaded('ratings') ? $this->ratings->count() : 0,
             ],
             'created_at' => $this->created_at?->toIso8601String(),

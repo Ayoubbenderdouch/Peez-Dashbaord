@@ -16,13 +16,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'role' => \App\Http\Middleware\CheckRole::class,
         ]);
 
-        // Disable CSRF for API routes
+        // Disable CSRF completely for API routes
         $middleware->validateCsrfTokens(except: [
             'api/*',
         ]);
 
-        // Make API stateless (no sessions)
-        $middleware->statefulApi();
+        // Remove session middleware from API routes
+        $middleware->api(remove: [
+            \Illuminate\Session\Middleware\StartSession::class,
+            \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
